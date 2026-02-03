@@ -1,0 +1,12 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  ci:
+    uses: <OWNER>/<REUSABLE_WORKFLOWS_REPO>/.github/workflows/reusable-python.yml@v1
+    with:
+      working_directory: "."
+      format_cmd: "python -m ruff format --check ."
+      lint_cmd: "python -m ruff check ."
+      type_cmd: "python -m mypy app"
+      test_cmd: "python -m pytest -q"
