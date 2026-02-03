@@ -1,0 +1,50 @@
+name: selftest
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+concurrency:
+  group: selftest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node_example:
+    uses: ./.github/workflows/reusable-node.yml
+    with:
+      working_directory: examples/node
+      run_typecheck: true
+      run_build: true
+
+  python_example:
+    uses: ./.github/workflows/reusable-python.yml
+    with:
+      working_directory: examples/python
+      format_cmd: python -m ruff format --check .
+      lint_cmd: python -m ruff check .
+      type_cmd: python -m mypy app
+      test_cmd: python -m pytest -q
+
+  python_pyproject_example:
+    uses: ./.github/workflows/reusable-python.yml
+    with:
+      working_directory: examples/python-pyproject
+      format_cmd: python -m ruff format --check .
+      lint_cmd: python -m ruff check .
+      type_cmd: python -m mypy app
+      test_cmd: python -m pytest -q
+
+  repo_hygiene_example:
+    uses: ./.github/workflows/reusable-repo-hygiene.yml
+    with:
+      strict: true
+
+  codeql_example_js_ts:
+    uses: ./.github/workflows/reusable-codeql.yml
+    with:
+      languages: "javascript-typescript"
