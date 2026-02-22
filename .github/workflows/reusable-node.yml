@@ -1,0 +1,139 @@
+name: reusable-node
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        type: string
+        default: "20"
+      working_directory:
+        type: string
+        default: "."
+      run_lint:
+        type: boolean
+        default: true
+      run_format:
+        type: boolean
+        default: true
+      run_test:
+        type: boolean
+        default: true
+      run_typecheck:
+        type: boolean
+        default: false
+      run_build:
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    env:
+      # Playwright is a dev dependency in some repos but browsers are only needed
+      # in dedicated e2e workflows. Skipping the implicit download makes "ci" jobs
+      # faster and less flaky.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      # CI speed/noise
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pinned
+
+      - name: Detect lockfile
+        id: lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f package-lock.json ]; then
+            echo "has_lockfile=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_lockfile=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # pinned
+        if: ${{ steps.lockfile.outputs.has_lockfile == 'true' }}
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # pinned
+        if: ${{ steps.lockfile.outputs.has_lockfile != 'true' }}
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Pin npm + registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Avoid npm CLI flakiness across runner images
+          npm i -g npm@10.9.2
+          npm config set registry https://registry.npmjs.org/
+          npm --version
+
+      - name: Prepare env (if .env.example exists)
+        shell: bash
+        run: |
+          if [ -f .env.example ] && [ ! -f .env ]; then
+            cp .env.example .env
+          fi
+
+      - name: Install deps (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ steps.lockfile.outputs.has_lockfile }}" = "true" ]; then
+            cmd=(npm ci)
+          else
+            cmd=(npm install)
+          fi
+
+          for attempt in 1 2 3; do
+            echo "Running: ${cmd[*]} (attempt ${attempt}/3)"
+            if "${cmd[@]}"; then
+              exit 0
+            fi
+            if [ ${attempt} -lt 3 ]; then
+              sleep_time=$((attempt * 7))
+              echo "Install failed; retrying in ${sleep_time}s..."
+              sleep ${sleep_time}
+            fi
+          done
+
+          echo "Install failed after retries."
+          exit 1
+
+      - name: Format
+        if: ${{ inputs.run_format }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['format:check'] ? 0 : 1)"; then
+            npm run -s format:check
+          else
+            npx --yes prettier@3.3.3 --check . --ignore-unknown
+          fi
+
+      - name: Lint
+        if: ${{ inputs.run_lint }}
+        run: npm run -s lint --if-present
+
+      - name: Typecheck
+        if: ${{ inputs.run_typecheck }}
+        run: npm run -s typecheck --if-present
+
+      - name: Test
+        if: ${{ inputs.run_test }}
+        run: npm run -s test --if-present
+
+      - name: Build
+        if: ${{ inputs.run_build }}
+        run: npm run -s build --if-present

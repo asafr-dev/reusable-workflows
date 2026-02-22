@@ -1,0 +1,84 @@
+name: selftest
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+concurrency:
+  group: selftest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node_example:
+    uses: ./.github/workflows/reusable-node.yml
+    with:
+      working_directory: examples/node
+      run_typecheck: true
+
+  python_example:
+    uses: ./.github/workflows/reusable-python.yml
+    with:
+      working_directory: examples/python
+
+  python_pyproject_example:
+    uses: ./.github/workflows/reusable-python.yml
+    with:
+      working_directory: examples/python-pyproject
+
+  repo_hygiene_example:
+    uses: ./.github/workflows/reusable-repo-hygiene.yml
+    with:
+      strict: true
+
+  codeql_example_js_ts:
+    uses: ./.github/workflows/reusable-codeql.yml
+    with:
+      languages: "javascript-typescript"
+
+  node_preflight_script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pinned
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # pinned
+        with:
+          node-version: "20"
+      - name: Pin npm + registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Avoid npm CLI flakiness across runner images
+          npm i -g npm@10.9.2
+          npm config set registry https://registry.npmjs.org/
+          npm --version
+
+      - name: Run scripts/check-node.sh on examples/node
+        shell: bash
+        run: bash scripts/check-node.sh examples/node
+
+  python_preflight_script_requirements:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pinned
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # pinned
+        with:
+          python-version: "3.12"
+      - name: Run scripts/check-python.sh on examples/python
+        shell: bash
+        run: bash scripts/check-python.sh examples/python
+
+  python_preflight_script_pyproject:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pinned
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # pinned
+        with:
+          python-version: "3.12"
+      - name: Run scripts/check-python.sh on examples/python-pyproject
+        shell: bash
+        run: bash scripts/check-python.sh examples/python-pyproject
+
