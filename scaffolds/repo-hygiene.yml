@@ -1,0 +1,8 @@
+name: repo-hygiene
+on: [push, pull_request]
+
+jobs:
+  hygiene:
+    uses: <OWNER>/<REUSABLE_WORKFLOWS_REPO>/.github/workflows/reusable-repo-hygiene.yml@v1
+    with:
+      strict: true

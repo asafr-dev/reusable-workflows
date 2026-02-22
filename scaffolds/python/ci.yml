@@ -1,0 +1,8 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  ci:
+    uses: <OWNER>/<REUSABLE_WORKFLOWS_REPO>/.github/workflows/reusable-python.yml@v1
+    with:
+      working_directory: "."
