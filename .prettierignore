@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+
+# build artifacts
+coverage/
+dist/
+build/
+.next/
+
+# caches
+.cache/
+
+# generated
+*.min.*
