@@ -1,0 +1,122 @@
+name: reusable-python
+
+on:
+  workflow_call:
+    inputs:
+      python_version:
+        type: string
+        default: "3.12"
+      working_directory:
+        type: string
+        default: "."
+      format_cmd:
+        type: string
+        default: "python -m ruff format --check ."
+      lint_cmd:
+        type: string
+        default: "python -m ruff check ."
+      type_cmd:
+        type: string
+        default: "python -m mypy app"
+      test_cmd:
+        type: string
+        default: "python -m pytest -q"
+      install_extra_dev:
+        type: boolean
+        default: true
+      install_cmd:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pinned
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # pinned
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+          cache-dependency-path: |
+            ${{ inputs.working_directory }}/pyproject.toml
+            ${{ inputs.working_directory }}/requirements.txt
+            ${{ inputs.working_directory }}/requirements-dev.txt
+            ${{ inputs.working_directory }}/setup.cfg
+            ${{ inputs.working_directory }}/setup.py
+
+      - name: Install deps (custom)
+        if: ${{ inputs.install_cmd != '' }}
+        shell: bash
+        run: ${{ inputs.install_cmd }}
+
+      - name: Install deps (auto)
+        if: ${{ inputs.install_cmd == '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # requirements*.txt
+          if [ -f requirements.txt ] || [ -f requirements-dev.txt ]; then
+            if [ -f requirements.txt ]; then
+              python -m pip install -r requirements.txt
+            fi
+            if [ "${{ inputs.install_extra_dev }}" = "true" ] && [ -f requirements-dev.txt ]; then
+              python -m pip install -r requirements-dev.txt
+            fi
+            exit 0
+          fi
+
+          # pyproject.toml / setup.py / setup.cfg
+          if [ -f pyproject.toml ] || [ -f setup.py ] || [ -f setup.cfg ]; then
+            if [ "${{ inputs.install_extra_dev }}" = "true" ]; then
+              python -m pip install ".[dev]"
+            else
+              python -m pip install "."
+            fi
+            exit 0
+          fi
+
+          echo "No dependency manifest found. Expected requirements*.txt or pyproject.toml/setup.py/setup.cfg." >&2
+          exit 1
+
+
+      - name: Require ruff (formatter/linter)
+        if: ${{ contains(inputs.format_cmd, 'ruff') || contains(inputs.lint_cmd, 'ruff') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m ruff --version >/dev/null 2>&1 || {
+            echo "ERROR: ruff is required (formatter/linter). Add it to dev dependencies (e.g., requirements-dev.txt or [project.optional-dependencies].dev)." >&2
+            exit 1
+          }
+
+
+      - name: Require Ruff formatter support
+        if: ${{ inputs.format_cmd != '' && contains(inputs.format_cmd, 'ruff format') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Avoid a false-positive grep; actually probe the subcommand.
+          if ! python -m ruff format --help >/dev/null 2>&1; then
+            echo "ERROR: your ruff does not support 'format'. Upgrade ruff to a version that supports ruff format, or set format_cmd: \"\" to disable formatting." >&2
+            exit 1
+          fi
+      - name: Format
+        if: ${{ inputs.format_cmd != '' }}
+        run: ${{ inputs.format_cmd }}
+
+      - name: Lint
+        run: ${{ inputs.lint_cmd }}
+
+      - name: Typecheck
+        run: ${{ inputs.type_cmd }}
+
+      - name: Test
+        run: ${{ inputs.test_cmd }}
