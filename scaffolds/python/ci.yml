@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline:
+    uses: <OWNER>/<REUSABLE_WORKFLOWS_REPO>/.github/workflows/reusable-python.yml@v1
+    with:
+      working_directory: .
+
+  ci:
+    if: ${{ always() }}
+    needs:
+      - pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate required check
+        run: |
+          echo "pipeline: ${{ needs.pipeline.result }}"
+          if [[ "${{ needs.pipeline.result }}" != "success" ]]; then
+            exit 1
+          fi
