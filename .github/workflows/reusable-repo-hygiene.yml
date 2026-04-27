@@ -1,0 +1,58 @@
+name: reusable-repo-hygiene
+
+on:
+  workflow_call:
+    inputs:
+      strict:
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pinned
+
+      - name: Repo hygiene check (no generated outputs / caches tracked)
+        shell: bash
+        env:
+          STRICT: ${{ inputs.strict }}
+        run: |
+          set -euo pipefail
+
+          DIR_PATTERN='(^|.*/)(node_modules|dist|build|\.venv|\.next|\.ruff_cache|\.pytest_cache|\.mypy_cache|\.tox|\.nox)/'
+          FILE_PATTERN='(^|.*/)(\.coverage|coverage\.xml)$'
+
+          FILES="$(git ls-files)"
+          DIR_MATCHES="$(printf '%s\n' "$FILES" | grep -E "$DIR_PATTERN" || true)"
+          FILE_MATCHES="$(printf '%s\n' "$FILES" | grep -E "$FILE_PATTERN" || true)"
+
+          if [[ -n "$DIR_MATCHES" || -n "$FILE_MATCHES" ]]; then
+            echo "ERROR: forbidden generated output(s) / cache(s) are tracked in git:" >&2
+            {
+              [[ -n "$DIR_MATCHES" ]] && printf '%s\n' "$DIR_MATCHES"
+              [[ -n "$FILE_MATCHES" ]] && printf '%s\n' "$FILE_MATCHES"
+            } | head -n 200 >&2
+
+            echo "" >&2
+            echo "Fix: remove generated outputs from git history and ensure .gitignore blocks them." >&2
+            exit 1
+          fi
+
+          if [[ "$STRICT" == "true" ]]; then
+            FOUND_DIRS="$(find . -type d \( \
+                -name node_modules -o -name dist -o -name build -o -name .venv -o -name .next \
+                -o -name .ruff_cache -o -name .pytest_cache -o -name .mypy_cache -o -name .tox -o -name .nox \
+              \) -prune -print 2>/dev/null | sed 's|^\./||' || true)"
+
+            if [[ -n "$FOUND_DIRS" ]]; then
+              echo "ERROR: forbidden directory(ies) exist in the working tree:" >&2
+              printf '%s\n' "$FOUND_DIRS" | head -n 200 >&2
+              exit 1
+            fi
+          fi
+
+          echo "OK: repo hygiene check passed."
