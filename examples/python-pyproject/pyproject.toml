@@ -7,7 +7,7 @@ name = "reusable-workflows-python-pyproject-example"
 version = "0.0.0"
 requires-python = ">=3.11"
 dependencies = [
-  "fastapi>=0.136.3,<1.0",
+  "fastapi>=0.138.2,<1.0",
   "httpx>=0.28.1,<1.0",
 ]
 
